@@ -20,6 +20,8 @@ python3 bot.py
 Add this service file to `/etc/systemd/system/vaxbot.service`
 
 ```
+[Unit]
+Description=VaxBot Service
 After=network.target
 StartLimitIntervalSec=0
 
