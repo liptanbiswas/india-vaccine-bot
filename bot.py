@@ -34,6 +34,12 @@ configs = [
         "alert_channel": "C020QLZ56UV",
     },
     {
+        "name": "Faridabad",
+        "state": "haryana",
+        "districts": ["Faridabad"],
+        "alert_channel": "C021MQQCYGY",
+    },
+    {
         "name": "Gurugram",
         "state": "haryana",
         "districts": ["Gurgaon"],
