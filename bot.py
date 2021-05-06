@@ -160,8 +160,12 @@ def get_day_for_week(week):
 def check_district(d, week, config):
     params = {"district_id": d["district_id"], "date": get_day_for_week(week)}
 
+    headers = {
+        'user-agent': "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_4) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.4430.93 Safari/537.36",
+    }
+
     url = "https://cdn-api.co-vin.in/api/v2/appointment/sessions/public/calendarByDistrict"
-    r = requests.get(url, params=params)
+    r = requests.get(url, params=params, headers=headers)
     data = r.json()
 
     print("district config is {d}", d)
@@ -228,12 +232,19 @@ def check_availability(config):
             if slots_found:
                 report_availability(slots_by_date_pincode, config)
                 return
+            time.sleep(sleep_between_configs)
 
 
 logger.info("Starting VaxBot")
 
 while True:
     for config in configs:
-        check_availability(config)
+        try:
+            check_availability(config)
+        except Exception as e:
+            logger.error(f"failed with exception {e}")
+            time.sleep(120)
+            continue
+
         time.sleep(sleep_between_configs)
     time.sleep(sleep_between_runs)
