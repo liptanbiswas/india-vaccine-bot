@@ -6,8 +6,10 @@ import logging
 import os
 import requests
 import time
+import traceback
 from pathlib import Path
 
+from TwitterAPI import TwitterAPI, TwitterError
 
 sleep_between_runs = 300
 sleep_between_configs = 15
@@ -21,35 +23,41 @@ configs = [
         "min_age_limit": 18,
         "min_pincode": 411000,
         "max_pincode": 412308,
+        "post_to_twitter": True,
     },
     {
         "name": "Bangalore",
         "state": "karnataka",
         "districts": ["Bangalore Rural", "Bangalore Urban"],
         "alert_channel": "C0216DGJBCH",
+        "post_to_twitter": True,
     },
     {
         "name": "Delhi",
         "state": "delhi",
         "alert_channel": "C020QLZ56UV",
+        "post_to_twitter": True,
     },
     {
         "name": "Faridabad",
         "state": "haryana",
         "districts": ["Faridabad"],
         "alert_channel": "C021MQQCYGY",
+        "post_to_twitter": True,
     },
     {
         "name": "Gurugram",
         "state": "haryana",
         "districts": ["Gurgaon"],
         "alert_channel": "C020QKJASNR",
+        "post_to_twitter": True,
     },
     {
         "name": "Hyderabad",
         "state": "telangana",
         "districts": ["Hyderabad"],
         "alert_channel": "C021JPGHMR6",
+        "post_to_twitter": True,
     },
     {
         "name": "Hyderabad",
@@ -63,6 +71,7 @@ configs = [
         "state": "maharashtra",
         "districts": ["Mumbai"],
         "alert_channel": "C020U1L01FD",
+        "post_to_twitter": True,
     },
 ]
 
@@ -97,6 +106,25 @@ def post_webhook(data, config):
     print(response)
 
 
+# post_twitter()
+# _________________________________________________________________________________________
+def post_twitter(msg, config):
+    if not config.get("post_to_twitter", False):
+        return
+
+    twitter = TwitterAPI(
+        os.environ["TWITTER_API_KEY"],
+        os.environ["TWITTER_API_SECRET"],
+        os.environ["TWITTER_ACCESS_TOKEN"],
+        os.environ["TWITTER_ACCESS_SECRET"]
+    )
+    try:
+        r = twitter.request("statuses/update",
+                            {"status": msg})
+    except TwitterError.TwitterConnectionError as e:
+        print(e)
+
+
 # report_availability()
 # _________________________________________________________________________________________
 def report_availability(slots_by_date_pincode, config):
@@ -108,10 +136,14 @@ def report_availability(slots_by_date_pincode, config):
 
     num_slots = 0
     fields = []
+    pincodes = []
+    centers = []
     for pincode, slots in slots_by_pincode.items():
         print(pincode, slots)
         num_slots += slots["available_capacity"]
         num_centers = len(slots["centers"])
+        pincodes.append(str(pincode))
+        centers += slots["centers"]
 
         if num_centers == 1:
             center_txt = slots["centers"][0]
@@ -131,11 +163,23 @@ def report_availability(slots_by_date_pincode, config):
 
     min_age_limit = config.get("min_age_limit", 18)
 
+    pretext = f"{num_slots} appointment slots for {min_age_limit}+ found in {config['name']} on {most_recent.strftime('%b %d, %Y')}!"
+    twitter_text = f"{num_slots} slots for {min_age_limit}+ found in {config['name']}"
+    if len(centers) == 1:
+        twitter_text += f" at {centers[0]}"
+    elif len(pincodes) == 1:
+        twitter_text += f" (pincode {pincodes[0]})"
+    else:
+        pincode_text = f" (pincodes {', '.join(pincodes)})"
+        if len(twitter_text) + len(pincode_text) < 100:
+            twitter_text += pincode_text
+    twitter_text += f" on {most_recent.strftime('%b %d')}!"
+
     data = {
         "username": "VaxBot",
         "attachments": [
             {
-                "pretext": f"{num_slots} appointment slots for {min_age_limit}+ found in {config['name']} on {most_recent.strftime('%b %d, %Y')}!",
+                "pretext": pretext,
                 "fields": fields,
             }
         ],
@@ -146,6 +190,7 @@ def report_availability(slots_by_date_pincode, config):
 
     print(data)
     post_webhook(data, config)
+    post_twitter(twitter_text, config)
 
 
 # get_day_for_week()
@@ -242,7 +287,7 @@ while True:
         try:
             check_availability(config)
         except Exception as e:
-            logger.error(f"failed with exception {e}")
+            logger.error(f"failed with exception {e}, {traceback.format_exc()}")
             time.sleep(120)
             continue
 
