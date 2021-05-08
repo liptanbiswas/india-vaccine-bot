@@ -159,10 +159,10 @@ def get_twitter_keys(city, config):
             access_secret += "_45"
 
         return (
-            api_key,
-            api_secret,
-            access_token,
-            access_secret
+            os.environ.get(api_key),
+            os.environ.get(api_secret),
+            os.environ.get(access_token),
+            os.environ.get(access_secret)
         )
 
 
