@@ -43,7 +43,7 @@ configs = [
         "state": "jharkhand",
         "districts": ["East Singhbhum"],
         "alert_channel": "C020RTE9S2K",
-        "post_to_twitter": False,
+        "post_to_twitter": True,
     },
     {
         "name": "Faridabad",
@@ -72,6 +72,13 @@ configs = [
         "districts": ["Hyderabad"],
         "alert_channel": "C0217J5B8NM",
         "min_age_limit": 45,
+    },
+    {
+        "name": "Jaipur",
+        "state": "rajasthan",
+        "districts": ["Jaipur I", "Jaipur II"],
+        "alert_channel": "C021927JUKU",
+        "post_to_twitter": True,
     },
     {
         "name": "Kolkata",
@@ -129,7 +136,7 @@ def post_webhook(data, config):
 
 # get_twitter_keys()
 # _________________________________________________________________________________________
-def get_twitter_keys(city):
+def get_twitter_keys(city, config):
     if city == "default":
         return (
             os.environ.get("TWITTER_API_KEY"),
@@ -139,11 +146,23 @@ def get_twitter_keys(city):
         )
     else:
         city = city.upper()
+        api_key = "TWITTER_API_KEY_{city}"
+        api_secret = "TWITTER_API_SECRET_{city}"
+        access_token = "TWITTER_ACCESS_TOKEN_{city}"
+        access_secret = "TWITTER_ACCESS_SECRET_{city}"
+
+        min_age_limit = config.get("min_age_limit", 18)
+        if min_age_limit == 45:
+            api_key += "_45"
+            api_secret += "_45"
+            access_token += "_45"
+            access_secret += "_45"
+
         return (
-            os.environ.get(f"TWITTER_API_KEY_{city}"),
-            os.environ.get(f"TWITTER_API_SECRET_{city}"),
-            os.environ.get(f"TWITTER_ACCESS_TOKEN_{city}"),
-            os.environ.get(f"TWITTER_ACCESS_SECRET_{city}")
+            api_key,
+            api_secret,
+            access_token,
+            access_secret
         )
 
 
@@ -154,7 +173,7 @@ def post_twitter(msg, config, city):
     if not config.get("post_to_twitter", False):
         return
 
-    api_key, api_secret, access_token, access_secret = get_twitter_keys(city)
+    api_key, api_secret, access_token, access_secret = get_twitter_keys(city, config)
 
     if api_key is None:
         logger.error(f"Twitter API key env vars not set for {city}")
@@ -164,10 +183,15 @@ def post_twitter(msg, config, city):
         api_key, api_secret, access_token, access_secret
     )
     try:
+        logger.info(f"Posting to {city} twitter")
         r = twitter.request("statuses/update",
                             {"status": msg})
+        logger.info(f"Twitter response: {r.status_code} {r.text}")
     except TwitterError.TwitterConnectionError as e:
-        print(e)
+        logger.error(f"Twitter error for {city}: {e}")
+
+    if city == "default":
+        time.sleep(10) # avoid twitter ratelimit
 
 
 # report_availability()
