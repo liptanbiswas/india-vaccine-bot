@@ -125,7 +125,7 @@ with p.open() as fh:
 def post_webhook(data, config):
     webhook_url = os.environ.get("WEBHOOK_URL")
     if webhook_url is None:
-        logger.error("WEBHOOK_URL env var is not set")
+        logger.error("WEBHOOK_URL env var is q")
         return
 
     response = requests.post(
@@ -146,10 +146,10 @@ def get_twitter_keys(city, config):
         )
     else:
         city = city.upper()
-        api_key = "TWITTER_API_KEY_{city}"
-        api_secret = "TWITTER_API_SECRET_{city}"
-        access_token = "TWITTER_ACCESS_TOKEN_{city}"
-        access_secret = "TWITTER_ACCESS_SECRET_{city}"
+        api_key = f"TWITTER_API_KEY_{city}"
+        api_secret = f"TWITTER_API_SECRET_{city}"
+        access_token = f"TWITTER_ACCESS_TOKEN_{city}"
+        access_secret = f"TWITTER_ACCESS_SECRET_{city}"
 
         min_age_limit = config.get("min_age_limit", 18)
         if min_age_limit == 45:
@@ -176,6 +176,8 @@ def post_twitter(msg, config, city):
 
     if api_key is None:
         logger.error(f"Twitter API key env vars not set for {city}")
+        logger.error(f"Got keys={get_twitter_keys(city, config)}")
+        logger.error(f"environ: {os.environ}")
         return
 
     twitter = TwitterAPI(api_key, api_secret, access_token, access_secret)
@@ -203,28 +205,31 @@ def report_availability(slots_by_date_pincode, config):
     fields = []
     pincodes = []
     centers = []
-    for pincode, slots in slots_by_pincode.items():
-        print(pincode, slots)
-        num_slots += slots["available_capacity"]
-        num_centers = len(slots["centers"])
-        pincodes.append(str(pincode))
-        centers += slots["centers"]
 
-        if num_centers == 1:
-            center_txt = slots["centers"][0]
-        else:
-            center_txt = f"{num_centers} centers"
+    for date in keys:
+        slots_by_pincode = slots_by_date_pincode[date]
+        for pincode, slots in slots_by_pincode.items():
+            print(pincode, slots)
+            num_slots += slots["available_capacity"]
+            num_centers = len(slots["centers"])
+            pincodes.append(str(pincode))
+            centers += slots["centers"]
 
-        if slots["available_capacity"] == 1:
-            num_txt = "One slot was found"
-        else:
-            num_txt = f"{slots['available_capacity']} slots were found"
-        fields.append(
-            {
-                "value": f"{num_txt} in pincode {pincode} at {center_txt}.",
-                "short": False,
-            }
-        )
+            if num_centers == 1:
+                center_txt = slots["centers"][0]
+            else:
+                center_txt = f"{num_centers} centers"
+
+            if slots["available_capacity"] == 1:
+                num_txt = "One slot was found"
+            else:
+                num_txt = f"{slots['available_capacity']} slots were found"
+            fields.append(
+                {
+                    "value": f"{date.strftime('%b %d, %Y')}: {num_txt} in pincode {pincode} at {center_txt}.",
+                    "short": False,
+                }
+            )
 
     min_age_limit = config.get("min_age_limit", 18)
 
@@ -232,19 +237,27 @@ def report_availability(slots_by_date_pincode, config):
 
     # Twitter formatting
     city = config["name"].upper()
-    twitter_text = (
-        f"{city}: {min_age_limit}+ slots found on {most_recent.strftime('%b %d')}!"
-    )
-    if len(centers) == 1:
-        twitter_text += f"\n{pincodes[0]}: {num_slots} slots at {centers[0]}"
-    elif len(pincodes) == 1:
-        twitter_text += f"\n{pincodes[0]}: {num_slots} slots at {len(centers)} centers"
-    else:
+    twitter_text = f"{city}: {num_slots} slots found for age {min_age_limit}+!"
+
+    for date in keys:
+        slots_by_pincode = slots_by_date_pincode[date]
         for pincode, slots in slots_by_pincode.items():
-            pin_text = f"\n{pincode}: {slots['available_capacity']} slots"
+            num_centers = len(slots["centers"])
+            if num_centers == 1:
+                center_txt = slots["centers"][0]
+            else:
+                center_txt = f"{num_centers} centers"
+
+            if slots["available_capacity"] == 1:
+                num_txt = "One slot found"
+            else:
+                num_txt = f"{slots['available_capacity']} slots found"
+
+            pin_text = f"\n{date.strftime('%b %d, %Y')}: {num_txt} in pincode {pincode} at {center_txt}"
+
             if len(twitter_text) + len(pin_text) > 120:
                 break
-            pincode_text = pin_text
+            twitter_text += pin_text
 
     twitter_text = twitter_text[:120]
 
@@ -261,7 +274,7 @@ def report_availability(slots_by_date_pincode, config):
     if "alert_channel" in config:
         data["channel"] = config["alert_channel"]
 
-    print(data)
+    logger.info(f"webhook {data=}")
     post_webhook(data, config)
     post_twitter(twitter_text, config, "default")
     post_twitter(twitter_text, config, config["name"])
@@ -289,6 +302,7 @@ def check_district(d, week, config):
 
     logger.info(f"district config is {d}", d)
     logger.info(f"{params=}")
+    logger.info(f"{data=}")
 
     min_age_limit = config.get("min_age_limit", 18)
 
@@ -328,11 +342,12 @@ def check_district(d, week, config):
     # We've built the slots_by_date_pincode map. Now remove all dates with
     # only one slot available to prevent noise
     logger.info(f"Found slots: {slots_by_date_pincode}")
+    #return slots_found, slots_by_date_pincode
     dates_to_remove = []
     for date, slots_by_pincode in slots_by_date_pincode.items():
-        pincodes = slots_by_pincode.keys()
+        pincodes = list(slots_by_pincode.keys())
         if len(pincodes) == 1:
-            slots = slots_by_pincode[0]
+            slots = slots_by_pincode[pincodes[0]]
             if slots["available_capacity"] == 1:
                 dates_to_remove.append(date)
     for date in dates_to_remove:
