@@ -142,7 +142,7 @@ def get_twitter_keys(city, config):
             os.environ.get("TWITTER_API_KEY"),
             os.environ.get("TWITTER_API_SECRET"),
             os.environ.get("TWITTER_ACCESS_TOKEN"),
-            os.environ.get("TWITTER_ACCESS_SECRET")
+            os.environ.get("TWITTER_ACCESS_SECRET"),
         )
     else:
         city = city.upper()
@@ -162,9 +162,8 @@ def get_twitter_keys(city, config):
             os.environ.get(api_key),
             os.environ.get(api_secret),
             os.environ.get(access_token),
-            os.environ.get(access_secret)
+            os.environ.get(access_secret),
         )
-
 
 
 # post_twitter()
@@ -179,19 +178,16 @@ def post_twitter(msg, config, city):
         logger.error(f"Twitter API key env vars not set for {city}")
         return
 
-    twitter = TwitterAPI(
-        api_key, api_secret, access_token, access_secret
-    )
+    twitter = TwitterAPI(api_key, api_secret, access_token, access_secret)
     try:
         logger.info(f"Posting to {city} twitter")
-        r = twitter.request("statuses/update",
-                            {"status": msg})
+        r = twitter.request("statuses/update", {"status": msg})
         logger.info(f"Twitter response: {r.status_code} {r.text}")
     except TwitterError.TwitterConnectionError as e:
         logger.error(f"Twitter error for {city}: {e}")
 
-    if city == "default":
-        time.sleep(10) # avoid twitter ratelimit
+    # if city == "default":
+    #    time.sleep(10) # avoid twitter ratelimit
 
 
 # report_availability()
@@ -233,16 +229,24 @@ def report_availability(slots_by_date_pincode, config):
     min_age_limit = config.get("min_age_limit", 18)
 
     pretext = f"{num_slots} appointment slots for {min_age_limit}+ found in {config['name']} on {most_recent.strftime('%b %d, %Y')}!"
-    twitter_text = f"{num_slots} slots for {min_age_limit}+ found in {config['name']}"
+
+    # Twitter formatting
+    city = config["name"].upper()
+    twitter_text = (
+        f"{city}: {min_age_limit}+ slots found on {most_recent.strftime('%b %d')}!"
+    )
     if len(centers) == 1:
-        twitter_text += f" at {centers[0]}"
+        twitter_text += f"\n{pincodes[0]}: {num_slots} slots at {centers[0]}"
     elif len(pincodes) == 1:
-        twitter_text += f" (pincode {pincodes[0]})"
+        twitter_text += f"\n{pincodes[0]}: {num_slots} slots at {len(centers)} centers"
     else:
-        pincode_text = f" (pincodes {', '.join(pincodes)})"
-        if len(twitter_text) + len(pincode_text) < 100:
-            twitter_text += pincode_text
-    twitter_text += f" on {most_recent.strftime('%b %d')}!"
+        for pincode, slots in slots_by_pincode.items():
+            pin_text = f"\n{pincode}: {slots['available_capacity']} slots"
+            if len(twitter_text) + len(pin_text) > 120:
+                break
+            pincode_text = pin_text
+
+    twitter_text = twitter_text[:120]
 
     data = {
         "username": "VaxBot",
@@ -276,15 +280,15 @@ def check_district(d, week, config):
     params = {"district_id": d["district_id"], "date": get_day_for_week(week)}
 
     headers = {
-        'user-agent': "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_4) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.4430.93 Safari/537.36",
+        "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_4) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.4430.93 Safari/537.36",
     }
 
     url = "https://cdn-api.co-vin.in/api/v2/appointment/sessions/public/calendarByDistrict"
     r = requests.get(url, params=params, headers=headers)
     data = r.json()
 
-    print("district config is {d}", d)
-    print("params", params)
+    logger.info(f"district config is {d}", d)
+    logger.info(f"{params=}")
 
     min_age_limit = config.get("min_age_limit", 18)
 
@@ -320,7 +324,24 @@ def check_district(d, week, config):
             slots_by_pincode[center["pincode"]] = slots
             slots_by_date_pincode[date] = slots_by_pincode
 
-    # print(slots_by_date_pincode)
+
+    # We've built the slots_by_date_pincode map. Now remove all dates with
+    # only one slot available to prevent noise
+    logger.info(f"Found slots: {slots_by_date_pincode}")
+    dates_to_remove = []
+    for date, slots_by_pincode in slots_by_date_pincode.items():
+        pincodes = slots_by_pincode.keys()
+        if len(pincodes) == 1:
+            slots = slots_by_pincode[0]
+            if slots["available_capacity"] == 1:
+                dates_to_remove.append(date)
+    for date in dates_to_remove:
+        del(slots_by_date_pincode[date])
+
+    logger.info(f"Slots after removing noise: {slots_by_date_pincode}")
+    slots_found = True
+    if slots_by_date_pincode == {}:
+        slots_found = False
     return slots_found, slots_by_date_pincode
 
 
