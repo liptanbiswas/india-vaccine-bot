@@ -77,7 +77,6 @@ def report_availability(slots_by_date_pincode, config):
             num_centers = len(slots["centers"])
             pincodes.append(str(pincode))
             centers += slots["centers"]
-            fields = []
 
             if num_centers == 1:
                 center_txt = slots["centers"][0]
