@@ -9,7 +9,7 @@ import time
 import traceback
 from pathlib import Path
 
-sleep_between_runs = 300
+sleep_between_runs = 60
 
 configs = [
     {
@@ -56,6 +56,8 @@ def post_alert(data):
         "https://events.pagerduty.com/v2/enqueue", data=json.dumps(data), headers=headers
     )
     print(response)
+    # Sleep 30m after sending an alert
+    time.sleep(1800)
 
 
 # report_availability()
