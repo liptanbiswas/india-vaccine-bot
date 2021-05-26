@@ -76,7 +76,7 @@ def report_availability(slots_by_date_pincode, config):
         slots_by_pincode = slots_by_date_pincode[date]
         for pincode, slots in slots_by_pincode.items():
             print(pincode, slots)
-            num_slots += slots["available_capacity"]
+            num_slots += slots["available_capacity_dose1"]
             num_centers = len(slots["centers"])
             pincodes.append(str(pincode))
             centers += slots["centers"]
@@ -86,10 +86,10 @@ def report_availability(slots_by_date_pincode, config):
             else:
                 center_txt = f"{num_centers} centers"
 
-            if slots["available_capacity"] == 1:
+            if slots["available_capacity_dose1"] == 1:
                 num_txt = "One slot was found"
             else:
-                num_txt = f"{slots['available_capacity']} slots were found"
+                num_txt = f"{slots['available_capacity_dose1']} slots were found"
             fields.append(f"{date.strftime('%b %d, %Y')}: {num_txt} in pincode {pincode} at {center_txt}.")
 
     min_age_limit = config.get("min_age_limit", 18)
@@ -143,7 +143,7 @@ def check_district(d, week, config):
             if session["min_age_limit"] > min_age_limit:
                 continue
 
-            if session["available_capacity"] == 0:
+            if session["available_capacity_dose1"] == 0:
                 continue
 
             if "min_pincode" in config:
@@ -159,9 +159,9 @@ def check_district(d, week, config):
             slots_by_pincode = slots_by_date_pincode.get(date, {})
             slots = slots_by_pincode.get(center["pincode"], {})
 
-            slots["available_capacity"] = (
-                slots.get("available_capacity", 0) +
-                session["available_capacity"]
+            slots["available_capacity_dose1"] = (
+                slots.get("available_capacity_dose1", 0) +
+                session["available_capacity_dose1"]
             )
             slots["centers"] = slots.get("centers", []) + [center["name"]]
 
@@ -177,7 +177,7 @@ def check_district(d, week, config):
         pincodes = list(slots_by_pincode.keys())
         if len(pincodes) == 1:
             slots = slots_by_pincode[pincodes[0]]
-            if slots["available_capacity"] == 1:
+            if slots["available_capacity_dose1"] == 1:
                 dates_to_remove.append(date)
     for date in dates_to_remove:
         del(slots_by_date_pincode[date])
