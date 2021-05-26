@@ -39,18 +39,21 @@ with p.open() as fh:
 
 # post_alert()
 # _____________________________________________________________________________
-def post_alert(data, config):
-    genie_key = os.environ.get("GENIEKEY")
-    if genie_key is None:
-        logger.error("GENIEKEY env var is required")
+def post_alert(data):
+    routing_key = os.environ.get("ROUTING_KEY")
+    if routing_key is None:
+        logger.error("ROUTING_KEY env var is required")
         return
+
     headers = {
-        "Authorization": f"GenieKey {genie_key}",
         "Content-Type": "application/json"
     }
 
+    data['routing_key'] = routing_key
+    data['event_action'] = "trigger"
+    
     response = requests.post(
-        "https://api.opsgenie.com/v2/alerts", data=json.dumps(data), headers=headers
+        "https://events.pagerduty.com/v2/enqueue", data=json.dumps(data), headers=headers
     )
     print(response)
 
@@ -94,12 +97,16 @@ def report_availability(slots_by_date_pincode, config):
     pretext = f"{num_slots} appointment slots for {min_age_limit}+ found in {config['name']} on {most_recent.strftime('%b %d, %Y')}!"
 
     data = {
-        "message": pretext,
-        "description": '#####'.join(fields)
+        "payload": {
+            "summary": pretext,
+            "source": "vaxbot",
+            "severity": "critical",
+            "custom_details": fields
+        }
     }
 
-    logger.info(f"webhook {data=}")
-    post_alert(data, config)
+    logger.info(f"webhook {data}")
+    post_alert(data)
 
 
 # get_day_for_week()
@@ -123,8 +130,8 @@ def check_district(d, week, config):
     data = r.json()
 
     logger.info(f"district config is {d}", d)
-    logger.info(f"{params=}")
-    logger.info(f"{data=}")
+    logger.info(f"{params}")
+    logger.info(f"{data}")
 
     min_age_limit = config.get("min_age_limit", 18)
 
@@ -188,7 +195,7 @@ def check_availability(config):
     state = config["state"]
     districts = config.get("districts")
 
-    logger.info(f"Checking {state} {districts=}")
+    logger.info(f"Checking {state} {districts}")
 
     if districts is None:
         districts_to_check = all_districts[state]["districts"]
